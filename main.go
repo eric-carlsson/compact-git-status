@@ -15,12 +15,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(output)
-
 	status, err := parseStatus(output)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Printf("%v\n", status)
 
 	prefix := "["
 	suffix := "]"
@@ -34,6 +34,18 @@ func main() {
 		b.WriteString(" L")
 	} else {
 		b.WriteString(fmt.Sprintf(" {%s}", status.UpstreamBranch))
+	}
+
+	if status.UpstreamBranchAhead > 0 {
+		b.WriteString(fmt.Sprintf(" ↑·%d", status.UpstreamBranchAhead))
+	}
+
+	if status.UpstreamBranchBehind > 0 {
+		if status.UpstreamBranchAhead == 0 {
+			b.WriteString(" ")
+		}
+
+		b.WriteString(fmt.Sprintf("↓·%d", status.UpstreamBranchBehind))
 	}
 
 	b.WriteString(separator)
@@ -64,13 +76,14 @@ func main() {
 }
 
 type Status struct {
-	Branch          string
-	UpstreamBranch  string
-	UpstreamChanges string
-	Modified        []string
-	Untracked       []string
-	Staged          []string
-	NumStashed      int
+	Branch               string
+	UpstreamBranch       string
+	UpstreamBranchAhead  int
+	UpstreamBranchBehind int
+	Modified             []string
+	Untracked            []string
+	Staged               []string
+	NumStashed           int
 }
 
 func gitStatus() (string, error) {
@@ -108,14 +121,24 @@ func parseStatus(output string) (*Status, error) {
 			case "branch.upstream":
 				status.UpstreamBranch = s[2]
 			case "branch.ab":
-				status.UpstreamChanges = s[2]
+				ahead, err := strconv.Atoi(s[2][1:])
+				if err != nil {
+					return nil, fmt.Errorf("parse ahead: %w", err)
+				}
+				status.UpstreamBranchAhead = ahead
+
+				behind, err := strconv.Atoi(s[3][1:])
+				if err != nil {
+					return nil, fmt.Errorf("parse behind: %w", err)
+				}
+				status.UpstreamBranchBehind = behind
 			}
 		case "1":
 			if slices.Contains([]byte{'M', 'A'}, s[1][0]) {
-				status.Staged = append(status.Staged, s[2])
+				status.Staged = append(status.Staged, s[8])
 			}
 			if s[1][1] == 'M' {
-				status.Modified = append(status.Modified, s[2])
+				status.Modified = append(status.Modified, s[8])
 			}
 		case "?":
 			status.Untracked = append(status.Untracked, s[1])
