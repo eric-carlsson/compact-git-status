@@ -6,7 +6,21 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/eric-carlsson/go-git-status/symbols"
 )
+
+type Status struct {
+	Branch               string
+	UpstreamBranch       string
+	UpstreamBranchAhead  int
+	UpstreamBranchBehind int
+	Modified             []string
+	Untracked            []string
+	Staged               []string
+	Conflicts            []string
+	NumStashed           int
+}
 
 func main() {
 	output, err := gitStatus()
@@ -19,75 +33,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%v\n", status)
-
-	prefix := "["
-	suffix := "]"
-	separator := "|"
-
-	var b strings.Builder
-	b.WriteString(prefix)
-	b.WriteString(status.Branch)
-
-	if status.UpstreamBranch == "" {
-		b.WriteString(" L")
-	} else {
-		b.WriteString(fmt.Sprintf(" {%s}", status.UpstreamBranch))
-	}
-
-	if status.UpstreamBranchAhead > 0 {
-		b.WriteString(fmt.Sprintf(" ↑·%d", status.UpstreamBranchAhead))
-	}
-
-	if status.UpstreamBranchBehind > 0 {
-		if status.UpstreamBranchAhead == 0 {
-			b.WriteString(" ")
-		}
-
-		b.WriteString(fmt.Sprintf("↓·%d", status.UpstreamBranchBehind))
-	}
-
-	b.WriteString(separator)
-
-	if len(status.Staged) > 0 {
-		b.WriteString(fmt.Sprintf("● %d", len(status.Staged)))
-	}
-
-	if len(status.Conflicts) > 0 {
-		b.WriteString(fmt.Sprintf("✖ %d", len(status.Conflicts)))
-	}
-
-	if len(status.Modified) > 0 {
-		b.WriteString(fmt.Sprintf("✚ %d", len(status.Modified)))
-	}
-
-	if len(status.Untracked) > 0 {
-		b.WriteString(fmt.Sprintf("…%d", len(status.Untracked)))
-	}
-
-	if status.NumStashed > 0 {
-		b.WriteString(fmt.Sprintf("⚑ %d", status.NumStashed))
-	}
-
-	if len(status.Staged)+len(status.Modified)+len(status.Untracked)+status.NumStashed == 0 {
-		b.WriteString("✔")
-	}
-
-	b.WriteString(suffix)
-
-	fmt.Println(b.String())
-}
-
-type Status struct {
-	Branch               string
-	UpstreamBranch       string
-	UpstreamBranchAhead  int
-	UpstreamBranchBehind int
-	Modified             []string
-	Untracked            []string
-	Staged               []string
-	Conflicts            []string
-	NumStashed           int
+	fmt.Println(buildOutput(*status))
 }
 
 func gitStatus() (string, error) {
@@ -152,4 +98,58 @@ func parseStatus(output string) (*Status, error) {
 	}
 
 	return status, nil
+}
+
+func buildOutput(status Status) string {
+	var b strings.Builder
+	b.WriteString(symbols.Prefix)
+	b.WriteString(status.Branch)
+
+	if status.UpstreamBranch == "" {
+		b.WriteString(fmt.Sprintf(" {%s}", symbols.Local))
+	} else {
+		b.WriteString(fmt.Sprintf(" {%s}", status.UpstreamBranch))
+	}
+
+	if status.UpstreamBranchAhead > 0 {
+		b.WriteString(fmt.Sprintf(" %s%d", symbols.Ahead, status.UpstreamBranchAhead))
+	}
+
+	if status.UpstreamBranchBehind > 0 {
+		if status.UpstreamBranchAhead == 0 {
+			b.WriteString(" ")
+		}
+
+		b.WriteString(fmt.Sprintf("%s%d", symbols.Behind, status.UpstreamBranchBehind))
+	}
+
+	b.WriteString(symbols.Sep)
+
+	if len(status.Staged) > 0 {
+		b.WriteString(fmt.Sprintf("%s%d", symbols.Staged, len(status.Staged)))
+	}
+
+	if len(status.Conflicts) > 0 {
+		b.WriteString(fmt.Sprintf("%s%d", symbols.Conflict, len(status.Conflicts)))
+	}
+
+	if len(status.Modified) > 0 {
+		b.WriteString(fmt.Sprintf("%s%d", symbols.Modified, len(status.Modified)))
+	}
+
+	if len(status.Untracked) > 0 {
+		b.WriteString(fmt.Sprintf("%s%d", symbols.Untracked, len(status.Untracked)))
+	}
+
+	if status.NumStashed > 0 {
+		b.WriteString(fmt.Sprintf("%s%d", symbols.Stashed, status.NumStashed))
+	}
+
+	if len(status.Staged)+len(status.Modified)+len(status.Untracked)+status.NumStashed == 0 {
+		b.WriteString(symbols.Clean)
+	}
+
+	b.WriteString(symbols.Suffix)
+
+	return b.String()
 }
