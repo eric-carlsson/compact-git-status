@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"slices"
 	"strconv"
 	"strings"
 )
@@ -54,6 +53,10 @@ func main() {
 		b.WriteString(fmt.Sprintf("● %d", len(status.Staged)))
 	}
 
+	if len(status.Conflicts) > 0 {
+		b.WriteString(fmt.Sprintf("✖ %d", len(status.Conflicts)))
+	}
+
 	if len(status.Modified) > 0 {
 		b.WriteString(fmt.Sprintf("✚ %d", len(status.Modified)))
 	}
@@ -83,6 +86,7 @@ type Status struct {
 	Modified             []string
 	Untracked            []string
 	Staged               []string
+	Conflicts            []string
 	NumStashed           int
 }
 
@@ -134,11 +138,13 @@ func parseStatus(output string) (*Status, error) {
 				status.UpstreamBranchBehind = behind
 			}
 		case "1":
-			if slices.Contains([]byte{'M', 'A'}, s[1][0]) {
-				status.Staged = append(status.Staged, s[8])
-			}
 			if s[1][1] == 'M' {
 				status.Modified = append(status.Modified, s[8])
+			}
+			if s[1][0] == 'U' {
+				status.Conflicts = append(status.Conflicts, s[8])
+			} else {
+				status.Staged = append(status.Staged, s[8])
 			}
 		case "?":
 			status.Untracked = append(status.Untracked, s[1])
