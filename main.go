@@ -29,6 +29,13 @@ func main() {
 	var b strings.Builder
 	b.WriteString(prefix)
 	b.WriteString(status.Branch)
+
+	if status.UpstreamBranch == "" {
+		b.WriteString(" L")
+	} else {
+		b.WriteString(fmt.Sprintf(" {%s}", status.UpstreamBranch))
+	}
+
 	b.WriteString(separator)
 
 	if len(status.Staged) > 0 {
@@ -47,17 +54,23 @@ func main() {
 		b.WriteString(fmt.Sprintf("⚑ %d", status.NumStashed))
 	}
 
+	if len(status.Staged)+len(status.Modified)+len(status.Untracked)+status.NumStashed == 0 {
+		b.WriteString("✔")
+	}
+
 	b.WriteString(suffix)
 
 	fmt.Println(b.String())
 }
 
 type Status struct {
-	Branch     string
-	Modified   []string
-	Untracked  []string
-	Staged     []string
-	NumStashed int
+	Branch          string
+	UpstreamBranch  string
+	UpstreamChanges string
+	Modified        []string
+	Untracked       []string
+	Staged          []string
+	NumStashed      int
 }
 
 func gitStatus() (string, error) {
@@ -92,6 +105,10 @@ func parseStatus(output string) (*Status, error) {
 					return nil, fmt.Errorf("parse num stashed: %w", err)
 				}
 				status.NumStashed = numStashed
+			case "branch.upstream":
+				status.UpstreamBranch = s[2]
+			case "branch.ab":
+				status.UpstreamChanges = s[2]
 			}
 		case "1":
 			if slices.Contains([]byte{'M', 'A'}, s[1][0]) {
