@@ -1,14 +1,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
 )
 
+// Status represents the status of a Git repository.
 type Status struct {
 	Commit    string
 	Branch    string
@@ -22,6 +25,26 @@ type Status struct {
 	Stashed   int
 }
 
+// State represents the state of a Git repository during a specific operation.
+type State struct {
+	Step  int
+	Total int
+	State string
+}
+
+const (
+	RebaseApply       string = "REBASE"
+	RebaseMerge              = "REBASE-m"
+	RebaseInteractive        = "REBASE-i"
+	Am                       = "AM"
+	AmRebase                 = "AM/REBASE"
+	Merging                  = "MERGING"
+	CherryPick               = "CHERRY-PICKING"
+	Reverting                = "REVERTING"
+	Bisecting                = "BISECTING"
+)
+
+// Symbols represents the symbols used to display the Git repository status.
 type Symbols struct {
 	Prefix    string
 	Suffix    string
@@ -37,8 +60,9 @@ type Symbols struct {
 	Clean     string
 }
 
+// main is the entry point of the program.
 func main() {
-	symbols := &Symbols{
+	symbols := Symbols{
 		Prefix:    "[",
 		Suffix:    "]",
 		Sep:       "|",
@@ -53,6 +77,17 @@ func main() {
 		Clean:     "✔",
 	}
 
+	state, err := gitState()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if state == nil {
+		// Nil state means not in a git repository
+		fmt.Print(symbols.Clean)
+		return
+	}
+
 	output, err := gitStatus()
 	if err != nil {
 		log.Fatal(err)
@@ -63,19 +98,113 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(buildOutput(status, symbols))
+	fmt.Print(buildOutput(*status, *state, symbols))
 }
 
+// gitState retrieves the current state of the Git repository.
+func gitState() (*State, error) {
+	stdout, err := exec.Command(
+		"git",
+		"rev-parse",
+		"--show-toplevel",
+	).Output()
+	if err != nil {
+		if e, ok := err.(*exec.ExitError); ok {
+			if e.ExitCode() == 128 {
+				return nil, nil
+			}
+		}
+		return nil, fmt.Errorf("run cmd: %w", err)
+	}
+
+	if err := os.Chdir(strings.TrimSpace(string(stdout))); err != nil {
+		return nil, fmt.Errorf("chdir: %w", err)
+	}
+
+	state := &State{State: ""}
+	switch {
+	case pathExists(".git/rebase-merge"):
+		step, err := readInt(".git/rebase-merge/msgnum")
+		if err != nil {
+			return nil, fmt.Errorf("read rebase-merge/msgnum: %w", err)
+		}
+		state.Step = step
+
+		total, err := readInt(".git/rebase-merge/end")
+		if err != nil {
+			return nil, fmt.Errorf("read rebase-merge/end: %w", err)
+		}
+		state.Total = total
+
+		if pathExists(".git/rebase-merge/interactive") {
+			state.State = RebaseInteractive
+		} else {
+			state.State = RebaseMerge
+		}
+	case pathExists(".git/rebase-apply"):
+		step, err := readInt(".git/rebase-apply/next")
+		if err != nil {
+			return nil, fmt.Errorf("read rebase-apply/next: %w", err)
+		}
+		state.Step = step
+
+		total, err := readInt(".git/rebase-apply/last")
+		if err != nil {
+			return nil, fmt.Errorf("read rebase-apply/last: %w", err)
+		}
+		state.Total = total
+
+		switch {
+		case pathExists(".git/rebase-apply/rebasing"):
+			state.State = RebaseApply
+		case pathExists(".git/rebase-apply/applying"):
+			state.State = Am
+		default:
+			state.State = AmRebase
+		}
+	case pathExists(".git/MERGE_HEAD"):
+		state.State = Merging
+	case pathExists(".git/CHERRY_PICK_HEAD"):
+		state.State = CherryPick
+	case pathExists(".git/REVERT_HEAD"):
+		state.State = Reverting
+	case pathExists(".git/BISECT_LOG"):
+		state.State = Bisecting
+	}
+
+	return state, nil
+}
+
+// pathExists checks if a file or directory exists.
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return !errors.Is(err, os.ErrNotExist)
+}
+
+// readInt reads an integer from a file.
+func readInt(path string) (int, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("read file: %w", err)
+	}
+
+	i, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		return 0, fmt.Errorf("parse int: %w", err)
+	}
+
+	return i, nil
+}
+
+// gitStatus retrieves the Git repository status.
 func gitStatus() (string, error) {
-	cmd := exec.Command(
+	stdout, err := exec.Command(
 		"git",
 		"status",
 		"--porcelain=2",
 		"--branch",
 		"--show-stash",
-	)
-
-	stdout, err := cmd.Output()
+	).Output()
 	if err != nil {
 		return "", fmt.Errorf("run cmd: %w", err)
 	}
@@ -83,6 +212,7 @@ func gitStatus() (string, error) {
 	return string(stdout), nil
 }
 
+// parseStatus parses the Git repository status output.
 func parseStatus(output string) (*Status, error) {
 	status := &Status{}
 
@@ -132,7 +262,8 @@ func parseStatus(output string) (*Status, error) {
 	return status, nil
 }
 
-func buildOutput(status *Status, symbols *Symbols) string {
+// buildOutput builds the final output string based on the Git repository status.
+func buildOutput(status Status, state State, symbols Symbols) string {
 	var b strings.Builder
 	b.WriteString(symbols.Prefix)
 
@@ -140,27 +271,37 @@ func buildOutput(status *Status, symbols *Symbols) string {
 		b.WriteString(fmt.Sprintf(":%s", status.Commit[:7]))
 	} else {
 		b.WriteString(status.Branch)
-	}
 
-	if status.Upstream == "" {
-		b.WriteString(fmt.Sprintf(" %s", symbols.Local))
-	} else {
-		b.WriteString(fmt.Sprintf(" {%s}", status.Upstream))
-	}
-
-	if status.Ahead > 0 || status.Behind > 0 {
-		b.WriteString(" ")
-
-		if status.Ahead > 0 {
-			b.WriteString(fmt.Sprintf("%s%d", symbols.Ahead, status.Ahead))
+		if status.Upstream == "" {
+			b.WriteString(fmt.Sprintf(" %s", symbols.Local))
+		} else {
+			b.WriteString(fmt.Sprintf(" {%s}", status.Upstream))
 		}
 
-		if status.Behind > 0 {
-			b.WriteString(fmt.Sprintf("%s%d", symbols.Behind, status.Behind))
+		if status.Ahead > 0 || status.Behind > 0 {
+			b.WriteString(" ")
+
+			if status.Ahead > 0 {
+				b.WriteString(fmt.Sprintf("%s%d", symbols.Ahead, status.Ahead))
+			}
+
+			if status.Behind > 0 {
+				b.WriteString(fmt.Sprintf("%s%d", symbols.Behind, status.Behind))
+			}
 		}
 	}
 
 	b.WriteString(symbols.Sep)
+
+	if state.State != "" {
+		b.WriteString(state.State)
+
+		if state.Total > 0 {
+			b.WriteString(fmt.Sprintf(" %d/%d", state.Step, state.Total))
+		}
+
+		b.WriteString(symbols.Sep)
+	}
 
 	if status.Staged > 0 {
 		b.WriteString(fmt.Sprintf("%s%d", symbols.Staged, status.Staged))
@@ -176,6 +317,10 @@ func buildOutput(status *Status, symbols *Symbols) string {
 	}
 	if status.Stashed > 0 {
 		b.WriteString(fmt.Sprintf("%s%d", symbols.Stashed, status.Stashed))
+	}
+
+	if status.Staged == 0 && status.Conflict == 0 && status.Modified == 0 && status.Untracked == 0 && status.Stashed == 0 {
+		b.WriteString(symbols.Clean)
 	}
 
 	b.WriteString(symbols.Suffix)
