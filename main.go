@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -60,8 +61,16 @@ type Symbols struct {
 	Clean     string
 }
 
+type Flags struct {
+	Path string
+}
+
 // main is the entry point of the program.
 func main() {
+	flags := Flags{}
+	flag.StringVar(&flags.Path, "path", "", "Path to the git repository. Leave empty for CWD.")
+	flag.Parse()
+
 	symbols := Symbols{
 		Prefix:    "[",
 		Suffix:    "]",
@@ -77,7 +86,7 @@ func main() {
 		Clean:     "✔",
 	}
 
-	state, err := gitState()
+	state, err := gitState(flags.Path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -88,7 +97,7 @@ func main() {
 		return
 	}
 
-	output, err := gitStatus()
+	output, err := gitStatus(flags.Path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -102,9 +111,11 @@ func main() {
 }
 
 // gitState retrieves the current state of the Git repository.
-func gitState() (*State, error) {
+func gitState(path string) (*State, error) {
 	stdout, err := exec.Command(
 		"git",
+		"-C",
+		path,
 		"rev-parse",
 		"--show-toplevel",
 	).Output()
@@ -197,9 +208,11 @@ func readInt(path string) (int, error) {
 }
 
 // gitStatus retrieves the Git repository status.
-func gitStatus() (string, error) {
+func gitStatus(path string) (string, error) {
 	stdout, err := exec.Command(
 		"git",
+		"-C",
+		path,
 		"status",
 		"--porcelain=2",
 		"--branch",
