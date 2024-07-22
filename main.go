@@ -59,6 +59,7 @@ type Symbols struct {
 	Untracked string
 	Stashed   string
 	Clean     string
+	Nop       string
 }
 
 type Flags struct {
@@ -70,7 +71,7 @@ type Flags struct {
 // main is the entry point of the program.
 func main() {
 	flags := Flags{Symbols: Symbols{}}
-	flag.StringVar(&flags.Path, "path", "", "Path to the git repository")
+	flag.StringVar(&flags.Path, "path", "", "Path to the git repository (default current working directory)")
 	flag.BoolVar(&flags.ShowUpstream, "show-upstream", false, "Show the upstream branch")
 	flag.StringVar(&flags.Symbols.Prefix, "symbol-prefix", "[", "Prefix symbol")
 	flag.StringVar(&flags.Symbols.Suffix, "symbol-suffix", "]", "Suffix symbol")
@@ -84,6 +85,7 @@ func main() {
 	flag.StringVar(&flags.Symbols.Ahead, "symbol-ahead", "↑·", "Ahead symbol")
 	flag.StringVar(&flags.Symbols.Behind, "symbol-behind", "↓·", "Behind symbol")
 	flag.StringVar(&flags.Symbols.Clean, "symbol-clean", "✔", "Clean symbol")
+	flag.StringVar(&flags.Symbols.Nop, "symbol-nop", " ", "No operation symbol")
 	flag.Parse()
 
 	state, err := gitState(flags.Path)
@@ -93,6 +95,7 @@ func main() {
 
 	if state == nil {
 		// Nil state means not in a git repository
+		fmt.Print(flags.Symbols.Nop)
 		return
 	}
 
