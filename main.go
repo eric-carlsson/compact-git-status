@@ -93,7 +93,6 @@ func main() {
 
 	if state == nil {
 		// Nil state means not in a git repository
-		fmt.Print(symbols.Clean)
 		return
 	}
 
