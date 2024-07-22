@@ -62,26 +62,28 @@ type Symbols struct {
 }
 
 type Flags struct {
-	Path    string
-	Symbols Symbols
+	Path         string
+	ShowUpstream bool
+	Symbols      Symbols
 }
 
 // main is the entry point of the program.
 func main() {
 	flags := Flags{Symbols: Symbols{}}
-	flag.StringVar(&flags.Path, "path", "", "Path to the git repository. Leave empty for CWD.")
-	flag.StringVar(&flags.Symbols.Prefix, "prefix", "[", "Prefix symbol")
-	flag.StringVar(&flags.Symbols.Suffix, "suffix", "]", "Suffix symbol")
-	flag.StringVar(&flags.Symbols.Sep, "sep", "|", "Separator symbol")
-	flag.StringVar(&flags.Symbols.Local, "local", "L", "Local branch symbol")
-	flag.StringVar(&flags.Symbols.Modified, "modified", "✚ ", "Modified symbol")
-	flag.StringVar(&flags.Symbols.Staged, "staged", "● ", "Staged symbol")
-	flag.StringVar(&flags.Symbols.Conflict, "conflict", "✖ ", "Conflict symbol")
-	flag.StringVar(&flags.Symbols.Untracked, "untracked", "…", "Untracked symbol")
-	flag.StringVar(&flags.Symbols.Stashed, "stashed", "⚑ ", "Stashed symbol")
-	flag.StringVar(&flags.Symbols.Ahead, "ahead", "↑·", "Ahead symbol")
-	flag.StringVar(&flags.Symbols.Behind, "behind", "↓·", "Behind symbol")
-	flag.StringVar(&flags.Symbols.Clean, "clean", "✔", "Clean symbol")
+	flag.StringVar(&flags.Path, "path", "", "Path to the git repository")
+	flag.BoolVar(&flags.ShowUpstream, "show-upstream", false, "Show the upstream branch")
+	flag.StringVar(&flags.Symbols.Prefix, "symbol-prefix", "[", "Prefix symbol")
+	flag.StringVar(&flags.Symbols.Suffix, "symbol-suffix", "]", "Suffix symbol")
+	flag.StringVar(&flags.Symbols.Sep, "symbol-sep", "|", "Separator symbol")
+	flag.StringVar(&flags.Symbols.Local, "symbol-local", "L", "Local branch symbol")
+	flag.StringVar(&flags.Symbols.Modified, "symbol-modified", "✚ ", "Modified symbol")
+	flag.StringVar(&flags.Symbols.Staged, "symbol-staged", "● ", "Staged symbol")
+	flag.StringVar(&flags.Symbols.Conflict, "symbol-conflict", "✖ ", "Conflict symbol")
+	flag.StringVar(&flags.Symbols.Untracked, "symbol-untracked", "…", "Untracked symbol")
+	flag.StringVar(&flags.Symbols.Stashed, "symbol-stashed", "⚑ ", "Stashed symbol")
+	flag.StringVar(&flags.Symbols.Ahead, "symbol-ahead", "↑·", "Ahead symbol")
+	flag.StringVar(&flags.Symbols.Behind, "symbol-behind", "↓·", "Behind symbol")
+	flag.StringVar(&flags.Symbols.Clean, "symbol-clean", "✔", "Clean symbol")
 	flag.Parse()
 
 	state, err := gitState(flags.Path)
@@ -104,7 +106,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Print(buildOutput(*status, *state, flags.Symbols))
+	fmt.Print(buildOutput(*status, *state, flags.Symbols, flags.ShowUpstream))
 }
 
 // gitState retrieves the current state of the Git repository.
@@ -273,7 +275,7 @@ func parseStatus(output string) (*Status, error) {
 }
 
 // buildOutput builds the final output string based on the Git repository status.
-func buildOutput(status Status, state State, symbols Symbols) string {
+func buildOutput(status Status, state State, symbols Symbols, showUpstream bool) string {
 	var b strings.Builder
 	b.WriteString(symbols.Prefix)
 
@@ -284,7 +286,8 @@ func buildOutput(status Status, state State, symbols Symbols) string {
 
 		if status.Upstream == "" {
 			b.WriteString(fmt.Sprintf(" %s", symbols.Local))
-		} else {
+		}
+		if status.Upstream != "" && showUpstream {
 			b.WriteString(fmt.Sprintf(" {%s}", status.Upstream))
 		}
 
