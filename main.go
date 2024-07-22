@@ -62,29 +62,27 @@ type Symbols struct {
 }
 
 type Flags struct {
-	Path string
+	Path    string
+	Symbols Symbols
 }
 
 // main is the entry point of the program.
 func main() {
-	flags := Flags{}
+	flags := Flags{Symbols: Symbols{}}
 	flag.StringVar(&flags.Path, "path", "", "Path to the git repository. Leave empty for CWD.")
+	flag.StringVar(&flags.Symbols.Prefix, "prefix", "[", "Prefix symbol")
+	flag.StringVar(&flags.Symbols.Suffix, "suffix", "]", "Suffix symbol")
+	flag.StringVar(&flags.Symbols.Sep, "sep", "|", "Separator symbol")
+	flag.StringVar(&flags.Symbols.Local, "local", "L", "Local branch symbol")
+	flag.StringVar(&flags.Symbols.Modified, "modified", "✚ ", "Modified symbol")
+	flag.StringVar(&flags.Symbols.Staged, "staged", "● ", "Staged symbol")
+	flag.StringVar(&flags.Symbols.Conflict, "conflict", "✖ ", "Conflict symbol")
+	flag.StringVar(&flags.Symbols.Untracked, "untracked", "…", "Untracked symbol")
+	flag.StringVar(&flags.Symbols.Stashed, "stashed", "⚑ ", "Stashed symbol")
+	flag.StringVar(&flags.Symbols.Ahead, "ahead", "↑·", "Ahead symbol")
+	flag.StringVar(&flags.Symbols.Behind, "behind", "↓·", "Behind symbol")
+	flag.StringVar(&flags.Symbols.Clean, "clean", "✔", "Clean symbol")
 	flag.Parse()
-
-	symbols := Symbols{
-		Prefix:    "[",
-		Suffix:    "]",
-		Sep:       "|",
-		Local:     "L",
-		Modified:  "✚ ",
-		Staged:    "● ",
-		Conflict:  "✖ ",
-		Untracked: "…",
-		Stashed:   "⚑ ",
-		Ahead:     "↑·",
-		Behind:    "↓·",
-		Clean:     "✔",
-	}
 
 	state, err := gitState(flags.Path)
 	if err != nil {
@@ -106,7 +104,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Print(buildOutput(*status, *state, symbols))
+	fmt.Print(buildOutput(*status, *state, flags.Symbols))
 }
 
 // gitState retrieves the current state of the Git repository.
